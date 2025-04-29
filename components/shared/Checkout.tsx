@@ -1,7 +1,7 @@
 "use client";
 
 import { loadStripe } from "@stripe/stripe-js";
-import { useEffect } from "react";
+import { useEffect, useCallback } from "react";
 
 import { useToast } from "@/components/ui/use-toast";
 import { checkoutCredits } from "@/lib/actions/transaction.action";
@@ -22,12 +22,15 @@ const Checkout = ({
   const { toast } = useToast();
 
   useEffect(() => {
-    loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
+    const initializeStripe = async () => {
+      await loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY!);
+    };
+    initializeStripe();
   }, []);
 
-  useEffect(() => {
-    // Check to see if this is a redirect back from Checkout
+  const handleRedirect = useCallback(() => {
     const query = new URLSearchParams(window.location.search);
+    
     if (query.get("success")) {
       toast({
         title: "Order placed!",
@@ -45,9 +48,15 @@ const Checkout = ({
         className: "error-toast",
       });
     }
-  }, []);
+  }, [toast]);
 
-  const onCheckout = async () => {
+  useEffect(() => {
+    handleRedirect();
+  }, [handleRedirect]);
+
+  const onCheckout = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault(); // Prevent default form submission
+
     const transaction = {
       plan,
       amount,
@@ -55,11 +64,21 @@ const Checkout = ({
       buyerId,
     };
 
-    await checkoutCredits(transaction);
+    try {
+      await checkoutCredits(transaction);
+    } catch (error) {
+      toast({
+        title: "Checkout Error",
+        description: "There was an issue processing your order. Please try again.",
+        duration: 5000,
+        className: "error-toast",
+      });
+      console.error("Checkout error:", error);
+    }
   };
 
   return (
-    <form action={onCheckout} method="POST">
+    <form onSubmit={onCheckout}>
       <section>
         <Button
           type="submit"
